@@ -50,6 +50,24 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('chatMessage', (data) => {
+    const { gameId, message } = data;
+    const game = gameManager.getGame(gameId);
+    
+    if (game) {
+      const player = game.players.find(p => p.socketId === socket.id);
+      if (player) {
+        const chatData = {
+          playerName: player.playerName,
+          message: message,
+          timestamp: new Date().toISOString()
+        };
+        
+        io.to(gameId).emit('chatMessage', chatData);
+      }
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
     gameManager.removePlayer(socket.id);

@@ -87,64 +87,8 @@ const GameStatus = styled.div`
   text-align: center;
 `;
 
-function GameBoard({ gameState, onMakeMove }) {
-  const [validMoves, setValidMoves] = useState(new Set());
+function GameBoard({ gameState, onMakeMove, validMoves = new Set() }) {
   const boardRef = useRef(null);
-
-  useEffect(() => {
-    if (gameState && gameState.gameStarted) {
-      calculateValidMoves();
-    }
-  }, [gameState]);
-
-  const calculateValidMoves = () => {
-    if (!gameState || !gameState.gameStarted) return;
-
-    const currentPlayerNumber = gameState.players[gameState.currentPlayer].playerNumber;
-    const moves = new Set();
-
-    for (let row = 0; row < gameState.boardSize; row++) {
-      for (let col = 0; col < gameState.boardSize; col++) {
-        if (gameState.board[row][col] === 0) {
-          if (getFlippedPieces(row, col, currentPlayerNumber).length > 0) {
-            moves.add(`${row}-${col}`);
-          }
-        }
-      }
-    }
-
-    setValidMoves(moves);
-  };
-
-  const getFlippedPieces = (row, col, playerNumber) => {
-    const flipped = [];
-    const opponent = playerNumber === 1 ? 2 : 1;
-    const directions = [
-      [-1, -1], [-1, 0], [-1, 1],
-      [0, -1],           [0, 1],
-      [1, -1],  [1, 0],  [1, 1]
-    ];
-
-    for (const [dr, dc] of directions) {
-      const tempFlipped = [];
-      let r = row + dr;
-      let c = col + dc;
-
-      while (r >= 0 && r < gameState.boardSize && c >= 0 && c < gameState.boardSize) {
-        if (gameState.board[r][c] === 0) break;
-        if (gameState.board[r][c] === opponent) {
-          tempFlipped.push([r, c]);
-        } else if (gameState.board[r][c] === playerNumber) {
-          flipped.push(...tempFlipped);
-          break;
-        }
-        r += dr;
-        c += dc;
-      }
-    }
-
-    return flipped;
-  };
 
   const handleCellClick = (row, col) => {
     if (validMoves.has(`${row}-${col}`)) {

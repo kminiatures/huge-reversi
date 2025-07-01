@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import io from 'socket.io-client';
 import styled from 'styled-components';
 import GameBoard from './components/GameBoard';
@@ -28,12 +28,18 @@ const GameContainer = styled.div`
   overflow: hidden;
 `;
 
+const GameInfoContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+`;
+
 const GameInfo = styled.div`
   background-color: #2a2a2a;
   border-radius: 10px;
   padding: 20px;
-  margin-bottom: 20px;
   border: 2px solid #4CAF50;
+  min-width: 250px;
 `;
 
 const InfoItem = styled.div`
@@ -54,12 +60,194 @@ const InfoValue = styled.span`
   color: white;
 `;
 
+const TurnIndicator = styled.div`
+  background-color: ${props => props.$isMyTurn ? '#4CAF50' : '#333'};
+  border: 3px solid ${props => props.$isMyTurn ? '#66BB6A' : '#555'};
+  border-radius: 10px;
+  padding: 15px;
+  text-align: center;
+  font-weight: bold;
+  font-size: 16px;
+  color: ${props => props.$isMyTurn ? 'white' : '#ccc'};
+  box-shadow: ${props => props.$isMyTurn ? '0 0 20px rgba(76, 175, 80, 0.5)' : 'none'};
+  animation: ${props => props.$isMyTurn ? 'pulse 2s infinite' : 'none'};
+  
+  @keyframes pulse {
+    0% {
+      box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+    }
+    50% {
+      box-shadow: 0 0 30px rgba(76, 175, 80, 0.8);
+    }
+    100% {
+      box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+    }
+  }
+`;
+
+const MyTurnText = styled.div`
+  font-size: 18px;
+  margin-bottom: 5px;
+`;
+
+const CurrentPlayerText = styled.div`
+  font-size: 14px;
+  opacity: 0.9;
+`;
+
+const ScoreBoard = styled.div`
+  background-color: #2a2a2a;
+  border-radius: 10px;
+  padding: 20px;
+  border: 2px solid #4CAF50;
+  min-width: 250px;
+`;
+
+const ScoreTitle = styled.div`
+  font-size: 18px;
+  font-weight: bold;
+  color: #4CAF50;
+  margin-bottom: 15px;
+  text-align: center;
+`;
+
+const PlayerScore = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  margin: 5px 0;
+  border-radius: 8px;
+  background-color: ${props => props.$isCurrentPlayer ? 'rgba(76, 175, 80, 0.2)' : '#333'};
+  border: 2px solid ${props => props.$isCurrentPlayer ? '#4CAF50' : '#555'};
+`;
+
+const PlayerInfo = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+`;
+
+const PlayerPiece = styled.div`
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: ${props => props.$playerNumber === 1 ? '#000000' : '#ffffff'};
+  border: 2px solid ${props => props.$playerNumber === 1 ? '#333333' : '#cccccc'};
+`;
+
+const PlayerName = styled.span`
+  font-weight: bold;
+  color: ${props => props.$isMe ? '#FFD700' : 'white'};
+`;
+
+const ScoreValue = styled.span`
+  font-size: 20px;
+  font-weight: bold;
+  color: #4CAF50;
+`;
+
+const ChatContainer = styled.div`
+  background-color: #2a2a2a;
+  border-radius: 10px;
+  padding: 20px;
+  border: 2px solid #4CAF50;
+  min-width: 250px;
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+`;
+
+const ChatTitle = styled.div`
+  font-size: 18px;
+  font-weight: bold;
+  color: #4CAF50;
+  margin-bottom: 15px;
+  text-align: center;
+`;
+
+const ChatMessages = styled.div`
+  flex: 1;
+  overflow-y: auto;
+  background-color: #333;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 15px;
+  max-height: 200px;
+`;
+
+const ChatMessage = styled.div`
+  margin-bottom: 8px;
+  padding: 5px;
+  border-radius: 5px;
+  background-color: ${props => props.$isMe ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 255, 255, 0.1)'};
+`;
+
+const MessageSender = styled.span`
+  font-weight: bold;
+  color: ${props => props.$isMe ? '#FFD700' : '#4CAF50'};
+  font-size: 12px;
+`;
+
+const MessageText = styled.div`
+  color: white;
+  margin-top: 2px;
+  word-wrap: break-word;
+`;
+
+const MessageTime = styled.span`
+  font-size: 10px;
+  color: #999;
+  margin-left: 5px;
+`;
+
+const ChatInput = styled.div`
+  display: flex;
+  gap: 10px;
+`;
+
+const MessageInput = styled.input`
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #555;
+  border-radius: 5px;
+  background-color: #444;
+  color: white;
+  
+  &:focus {
+    outline: none;
+    border-color: #4CAF50;
+  }
+`;
+
+const SendButton = styled.button`
+  padding: 8px 15px;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: bold;
+  
+  &:hover {
+    background-color: #45a049;
+  }
+  
+  &:disabled {
+    background-color: #666;
+    cursor: not-allowed;
+  }
+`;
+
 function App() {
   const [socket, setSocket] = useState(null);
   const [gameState, setGameState] = useState(null);
   const [gameId, setGameId] = useState('');
   const [playerName, setPlayerName] = useState('');
   const [connected, setConnected] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [messageInput, setMessageInput] = useState('');
+  const chatMessagesRef = useRef(null);
 
   useEffect(() => {
     const newSocket = io('http://localhost:5001');
@@ -85,8 +273,19 @@ function App() {
       alert(`エラー: ${error}`);
     });
 
+    newSocket.on('chatMessage', (chatData) => {
+      setChatMessages(prev => [...prev, chatData]);
+    });
+
     return () => newSocket.close();
   }, []);
+
+  // チャットメッセージが更新されたら自動スクロール
+  useEffect(() => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
+  }, [chatMessages]);
 
   const joinGame = () => {
     if (socket && gameId && playerName) {
@@ -97,6 +296,22 @@ function App() {
   const makeMove = (row, col) => {
     if (socket && gameState) {
       socket.emit('makeMove', { gameId: gameState.gameId, row, col });
+    }
+  };
+
+  const sendMessage = () => {
+    if (socket && gameState && messageInput.trim()) {
+      socket.emit('chatMessage', { 
+        gameId: gameState.gameId, 
+        message: messageInput.trim() 
+      });
+      setMessageInput('');
+    }
+  };
+
+  const handleMessageKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      sendMessage();
     }
   };
 
@@ -186,46 +401,133 @@ function App() {
           connected={connected}
         />
       ) : (
-        <>
-          <GameInfo>
-            <InfoItem>
-              <InfoLabel>ゲームID:</InfoLabel>
-              <InfoValue>{gameState?.gameId || gameId}</InfoValue>
-            </InfoItem>
-            <InfoItem>
-              <InfoLabel>あなたのプレイヤー名:</InfoLabel>
-              <InfoValue>{playerName}</InfoValue>
-            </InfoItem>
-            <InfoItem>
-              <InfoLabel>参加プレイヤー:</InfoLabel>
-              <InfoValue>
-                {gameState?.players?.map(p => p.playerName).join(', ') || 'なし'} 
-                ({gameState?.players?.length || 0}/2)
-              </InfoValue>
-            </InfoItem>
-            {gameState?.gameStarted && (
-              <InfoItem>
-                <InfoLabel>現在のターン:</InfoLabel>
-                <InfoValue>{gameState.players[gameState.currentPlayer]?.playerName}</InfoValue>
-              </InfoItem>
-            )}
-          </GameInfo>
+        <GameContainer>
+          {gameState && gameState.boardSize > 16 ? (
+            <VirtualizedBoard 
+              gameState={gameState} 
+              onMakeMove={makeMove}
+              validMoves={(() => {
+                if (!gameState?.gameStarted) return new Set();
+                const currentPlayer = gameState.players[gameState.currentPlayer];
+                const isMyTurn = currentPlayer?.playerName === playerName;
+                return isMyTurn ? calculateValidMoves(gameState) : new Set();
+              })()}
+            />
+          ) : (
+            <GameBoard 
+              gameState={gameState} 
+              onMakeMove={makeMove}
+              validMoves={(() => {
+                if (!gameState?.gameStarted) return new Set();
+                const currentPlayer = gameState.players[gameState.currentPlayer];
+                const isMyTurn = currentPlayer?.playerName === playerName;
+                return isMyTurn ? calculateValidMoves(gameState) : new Set();
+              })()}
+            />
+          )}
           
-          <GameContainer>
-            {gameState && gameState.boardSize > 16 ? (
-              <VirtualizedBoard 
-                gameState={gameState} 
-                onMakeMove={makeMove}
-                validMoves={calculateValidMoves(gameState)}
-              />
-            ) : (
-              <GameBoard 
-                gameState={gameState} 
-                onMakeMove={makeMove}
-              />
-            )}
-          </GameContainer>
-        </>
+          <GameInfoContainer>
+            <GameInfo>
+              <InfoItem>
+                <InfoLabel>ゲームID:</InfoLabel>
+                <InfoValue>{gameState?.gameId || gameId}</InfoValue>
+              </InfoItem>
+              <InfoItem>
+                <InfoLabel>あなたのプレイヤー名:</InfoLabel>
+                <InfoValue>{playerName}</InfoValue>
+              </InfoItem>
+              <InfoItem>
+                <InfoLabel>参加プレイヤー:</InfoLabel>
+                <InfoValue>
+                  {gameState?.players?.map(p => p.playerName).join(', ') || 'なし'} 
+                  ({gameState?.players?.length || 0}/2)
+                </InfoValue>
+              </InfoItem>
+            </GameInfo>
+            
+            {gameState?.gameStarted && (() => {
+              const currentPlayer = gameState.players[gameState.currentPlayer];
+              const isMyTurn = currentPlayer?.playerName === playerName;
+              
+              return (
+                <>
+                  <TurnIndicator $isMyTurn={isMyTurn}>
+                    <MyTurnText>
+                      {isMyTurn ? '🎯 あなたの番です！' : '⏳ 相手の番です'}
+                    </MyTurnText>
+                    <CurrentPlayerText>
+                      現在のプレイヤー: {currentPlayer?.playerName}
+                    </CurrentPlayerText>
+                  </TurnIndicator>
+                  
+                  <ScoreBoard>
+                    <ScoreTitle>📊 現在のスコア</ScoreTitle>
+                    {gameState.players.map((player, index) => {
+                      const isCurrentPlayer = gameState.currentPlayer === index;
+                      const isMe = player.playerName === playerName;
+                      const score = gameState.scores[player.playerNumber] || 0;
+                      
+                      return (
+                        <PlayerScore key={player.playerNumber} $isCurrentPlayer={isCurrentPlayer}>
+                          <PlayerInfo>
+                            <PlayerPiece $playerNumber={player.playerNumber} />
+                            <PlayerName $isMe={isMe}>
+                              {player.playerName}
+                              {isMe && ' (あなた)'}
+                            </PlayerName>
+                          </PlayerInfo>
+                          <ScoreValue>{score}</ScoreValue>
+                        </PlayerScore>
+                      );
+                    })}
+                  </ScoreBoard>
+                  
+                  <ChatContainer>
+                    <ChatTitle>💬 チャット</ChatTitle>
+                    <ChatMessages ref={chatMessagesRef}>
+                      {chatMessages.map((msg, index) => {
+                        const isMe = msg.playerName === playerName;
+                        const time = new Date(msg.timestamp).toLocaleTimeString('ja-JP', { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        });
+                        
+                        return (
+                          <ChatMessage key={index} $isMe={isMe}>
+                            <div>
+                              <MessageSender $isMe={isMe}>
+                                {msg.playerName}
+                                {isMe && ' (あなた)'}
+                              </MessageSender>
+                              <MessageTime>{time}</MessageTime>
+                            </div>
+                            <MessageText>{msg.message}</MessageText>
+                          </ChatMessage>
+                        );
+                      })}
+                    </ChatMessages>
+                    <ChatInput>
+                      <MessageInput
+                        type="text"
+                        placeholder="メッセージを入力..."
+                        value={messageInput}
+                        onChange={(e) => setMessageInput(e.target.value)}
+                        onKeyPress={handleMessageKeyPress}
+                        maxLength={200}
+                      />
+                      <SendButton 
+                        onClick={sendMessage}
+                        disabled={!messageInput.trim()}
+                      >
+                        送信
+                      </SendButton>
+                    </ChatInput>
+                  </ChatContainer>
+                </>
+              );
+            })()}
+          </GameInfoContainer>
+        </GameContainer>
       )}
     </AppContainer>
   );
