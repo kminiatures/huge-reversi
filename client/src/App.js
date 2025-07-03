@@ -239,6 +239,50 @@ const SendButton = styled.button`
   }
 `;
 
+const OpponentCursor = styled.div`
+  position: absolute;
+  pointer-events: none;
+  z-index: 1000;
+  transition: all 0.1s ease-out;
+  opacity: 0.7;
+`;
+
+const CursorIcon = styled.div`
+  width: 20px;
+  height: 20px;
+  background-color: ${props => props.$playerNumber === 1 ? '#ff4444' : '#4444ff'};
+  border: 2px solid white;
+  border-radius: 50%;
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+`;
+
+const CursorLabel = styled.div`
+  position: absolute;
+  top: 25px;
+  left: 0;
+  background-color: ${props => props.$playerNumber === 1 ? '#ff4444' : '#4444ff'};
+  color: white;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: bold;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 8px;
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 4px solid ${props => props.$playerNumber === 1 ? '#ff4444' : '#4444ff'};
+  }
+`;
+
 function App() {
   const [socket, setSocket] = useState(null);
   const [gameState, setGameState] = useState(null);
@@ -247,7 +291,10 @@ function App() {
   const [connected, setConnected] = useState(false);
   const [chatMessages, setChatMessages] = useState([]);
   const [messageInput, setMessageInput] = useState('');
+  const [opponentMouse, setOpponentMouse] = useState(null);
   const chatMessagesRef = useRef(null);
+  const gameContainerRef = useRef(null);
+  const lastMouseSendTime = useRef(0);
 
   useEffect(() => {
     const newSocket = io('http://localhost:5001');
@@ -275,6 +322,20 @@ function App() {
 
     newSocket.on('chatMessage', (chatData) => {
       setChatMessages(prev => [...prev, chatData]);
+    });
+
+    newSocket.on('opponentMouseMove', (mouseData) => {
+      setOpponentMouse(mouseData);
+      
+      // 3秒後にカーソルを非表示にする
+      setTimeout(() => {
+        setOpponentMouse(prev => {
+          if (prev && prev.playerName === mouseData.playerName) {
+            return null;
+          }
+          return prev;
+        });
+      }, 3000);
     });
 
     return () => newSocket.close();
@@ -312,6 +373,33 @@ function App() {
   const handleMessageKeyPress = (e) => {
     if (e.key === 'Enter') {
       sendMessage();
+    }
+  };
+
+  const handleMouseMove = (e) => {
+    if (socket && gameState && gameContainerRef.current) {
+      const now = Date.now();
+      // 50ms間隔でスロットリング（20fps）
+      if (now - lastMouseSendTime.current < 50) {
+        return;
+      }
+      lastMouseSendTime.current = now;
+      
+      const rect = gameContainerRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      // ボード上の位置も計算（オプション）
+      const boardX = Math.floor(x / 20); // セルサイズが20px
+      const boardY = Math.floor(y / 20);
+      
+      socket.emit('mouseMove', {
+        gameId: gameState.gameId,
+        x: x,
+        y: y,
+        boardX: boardX,
+        boardY: boardY
+      });
     }
   };
 
@@ -401,7 +489,11 @@ function App() {
           connected={connected}
         />
       ) : (
-        <GameContainer>
+        <GameContainer 
+          ref={gameContainerRef} 
+          onMouseMove={handleMouseMove}
+          style={{ position: 'relative' }}
+        >
           {gameState && gameState.boardSize > 16 ? (
             <VirtualizedBoard 
               gameState={gameState} 
@@ -424,6 +516,22 @@ function App() {
                 return isMyTurn ? calculateValidMoves(gameState) : new Set();
               })()}
             />
+          )}
+          
+          {/* 相手のマウスカーソル表示 */}
+          {opponentMouse && (
+            <OpponentCursor
+              style={{
+                left: `${opponentMouse.x}px`,
+                top: `${opponentMouse.y}px`
+              }}
+            >
+              <CursorIcon $playerNumber={opponentMouse.playerNumber}>
+                <CursorLabel $playerNumber={opponentMouse.playerNumber}>
+                  {opponentMouse.playerName}
+                </CursorLabel>
+              </CursorIcon>
+            </OpponentCursor>
           )}
           
           <GameInfoContainer>

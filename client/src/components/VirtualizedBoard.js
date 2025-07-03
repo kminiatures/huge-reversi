@@ -49,6 +49,42 @@ const Piece = styled.div`
   border-radius: 50%;
   background-color: ${props => props.$player === 1 ? '#000000' : '#ffffff'};
   border: 1px solid ${props => props.$player === 1 ? '#333333' : '#cccccc'};
+  transition: all 0.6s cubic-bezier(0.4, 0.0, 0.2, 1);
+  transform-style: preserve-3d;
+  
+  &.flipping {
+    animation: flip 0.6s cubic-bezier(0.4, 0.0, 0.2, 1);
+  }
+  
+  &.placing {
+    animation: place 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  
+  @keyframes flip {
+    0% {
+      transform: rotateY(0deg);
+    }
+    50% {
+      transform: rotateY(90deg) scaleX(0.8);
+    }
+    100% {
+      transform: rotateY(180deg);
+    }
+  }
+  
+  @keyframes place {
+    0% {
+      transform: scale(0) rotateZ(180deg);
+      opacity: 0;
+    }
+    70% {
+      transform: scale(1.2) rotateZ(20deg);
+    }
+    100% {
+      transform: scale(1) rotateZ(0deg);
+      opacity: 1;
+    }
+  }
 `;
 
 const CELL_SIZE = 20;
@@ -60,6 +96,9 @@ function VirtualizedBoard({ gameState, onMakeMove, validMoves }) {
   const [scrollLeft, setScrollLeft] = useState(0);
   const [containerHeight, setContainerHeight] = useState(600);
   const [containerWidth, setContainerWidth] = useState(600);
+  const [flippingPieces, setFlippingPieces] = useState(new Set());
+  const [placingPieces, setPlacingPieces] = useState(new Set());
+  const prevBoardRef = useRef(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -91,6 +130,55 @@ function VirtualizedBoard({ gameState, onMakeMove, validMoves }) {
       window.removeEventListener('resize', handleResize);
     };
   }, [gameState]);
+
+  // ボードの変更を検出してアニメーションを実行
+  useEffect(() => {
+    if (!gameState || !gameState.board || !prevBoardRef.current) {
+      prevBoardRef.current = gameState?.board;
+      return;
+    }
+
+    const prevBoard = prevBoardRef.current;
+    const currentBoard = gameState.board;
+    const newFlippingPieces = new Set();
+    const newPlacingPieces = new Set();
+
+    // 変更されたセルを検出
+    for (let row = 0; row < gameState.boardSize; row++) {
+      for (let col = 0; col < gameState.boardSize; col++) {
+        if (prevBoard[row] && currentBoard[row]) {
+          if (prevBoard[row][col] === 0 && currentBoard[row][col] !== 0) {
+            // 新しく置かれたコマ
+            newPlacingPieces.add(`${row}-${col}`);
+          } else if (prevBoard[row][col] !== 0 && currentBoard[row][col] !== 0 &&
+                     prevBoard[row][col] !== currentBoard[row][col]) {
+            // コマが変更された（ひっくり返った）
+            newFlippingPieces.add(`${row}-${col}`);
+          }
+        }
+      }
+    }
+
+    if (newPlacingPieces.size > 0) {
+      setPlacingPieces(newPlacingPieces);
+      
+      // アニメーション終了後にクラスを削除
+      setTimeout(() => {
+        setPlacingPieces(new Set());
+      }, 400); // 配置アニメーション時間
+    }
+
+    if (newFlippingPieces.size > 0) {
+      setFlippingPieces(newFlippingPieces);
+      
+      // アニメーション終了後にクラスを削除
+      setTimeout(() => {
+        setFlippingPieces(new Set());
+      }, 600); // ひっくり返しアニメーション時間
+    }
+
+    prevBoardRef.current = currentBoard.map(row => [...row]); // ディープコピー
+  }, [gameState?.board]);
 
   const visibleRange = useMemo(() => {
     if (!gameState) return { startRow: 0, endRow: 0, startCol: 0, endCol: 0 };
@@ -129,10 +217,18 @@ function VirtualizedBoard({ gameState, onMakeMove, validMoves }) {
     for (let col = visibleRange.startCol; col <= visibleRange.endCol; col++) {
       const cell = gameState.board[row][col];
       const isValidMove = validMoves.has(`${row}-${col}`);
+      const isFlipping = flippingPieces.has(`${row}-${col}`);
+      const isPlacing = placingPieces.has(`${row}-${col}`);
       
       if (isValidMove) {
         console.log(`Rendering valid move at [${row}, ${col}]`);
       }
+      
+      const getAnimationClass = () => {
+        if (isFlipping) return 'flipping';
+        if (isPlacing) return 'placing';
+        return '';
+      };
       
       cells.push(
         <Cell
@@ -141,7 +237,12 @@ function VirtualizedBoard({ gameState, onMakeMove, validMoves }) {
           $left={col * CELL_SIZE}
           onClick={() => handleCellClick(row, col)}
         >
-          {cell !== 0 && <Piece $player={cell} />}
+          {cell !== 0 && (
+            <Piece 
+              $player={cell} 
+              className={getAnimationClass()}
+            />
+          )}
           {isValidMove && (
             <div style={{
               position: 'absolute',

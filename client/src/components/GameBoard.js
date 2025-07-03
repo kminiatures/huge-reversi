@@ -49,7 +49,42 @@ const Piece = styled.div`
   border-radius: 50%;
   background-color: ${props => props.$player === 1 ? '#000000' : '#ffffff'};
   border: 2px solid ${props => props.$player === 1 ? '#333333' : '#cccccc'};
-  transition: all 0.3s ease;
+  transition: all 0.6s cubic-bezier(0.4, 0.0, 0.2, 1);
+  transform-style: preserve-3d;
+  
+  &.flipping {
+    animation: flip 0.6s cubic-bezier(0.4, 0.0, 0.2, 1);
+  }
+  
+  &.placing {
+    animation: place 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  
+  @keyframes flip {
+    0% {
+      transform: rotateY(0deg);
+    }
+    50% {
+      transform: rotateY(90deg) scaleX(0.8);
+    }
+    100% {
+      transform: rotateY(180deg);
+    }
+  }
+  
+  @keyframes place {
+    0% {
+      transform: scale(0) rotateZ(180deg);
+      opacity: 0;
+    }
+    70% {
+      transform: scale(1.2) rotateZ(20deg);
+    }
+    100% {
+      transform: scale(1) rotateZ(0deg);
+      opacity: 1;
+    }
+  }
 `;
 
 const GameInfo = styled.div`
@@ -89,6 +124,58 @@ const GameStatus = styled.div`
 
 function GameBoard({ gameState, onMakeMove, validMoves = new Set() }) {
   const boardRef = useRef(null);
+  const [flippingPieces, setFlippingPieces] = useState(new Set());
+  const [placingPieces, setPlacingPieces] = useState(new Set());
+  const prevBoardRef = useRef(null);
+
+  // ボードの変更を検出してアニメーションを実行
+  useEffect(() => {
+    if (!gameState || !gameState.board || !prevBoardRef.current) {
+      prevBoardRef.current = gameState?.board;
+      return;
+    }
+
+    const prevBoard = prevBoardRef.current;
+    const currentBoard = gameState.board;
+    const newFlippingPieces = new Set();
+    const newPlacingPieces = new Set();
+
+    // 変更されたセルを検出
+    for (let row = 0; row < gameState.boardSize; row++) {
+      for (let col = 0; col < gameState.boardSize; col++) {
+        if (prevBoard[row] && currentBoard[row]) {
+          if (prevBoard[row][col] === 0 && currentBoard[row][col] !== 0) {
+            // 新しく置かれたコマ
+            newPlacingPieces.add(`${row}-${col}`);
+          } else if (prevBoard[row][col] !== 0 && currentBoard[row][col] !== 0 &&
+                     prevBoard[row][col] !== currentBoard[row][col]) {
+            // コマが変更された（ひっくり返った）
+            newFlippingPieces.add(`${row}-${col}`);
+          }
+        }
+      }
+    }
+
+    if (newPlacingPieces.size > 0) {
+      setPlacingPieces(newPlacingPieces);
+      
+      // アニメーション終了後にクラスを削除
+      setTimeout(() => {
+        setPlacingPieces(new Set());
+      }, 400); // 配置アニメーション時間
+    }
+
+    if (newFlippingPieces.size > 0) {
+      setFlippingPieces(newFlippingPieces);
+      
+      // アニメーション終了後にクラスを削除
+      setTimeout(() => {
+        setFlippingPieces(new Set());
+      }, 600); // ひっくり返しアニメーション時間
+    }
+
+    prevBoardRef.current = currentBoard.map(row => [...row]); // ディープコピー
+  }, [gameState?.board]);
 
   const handleCellClick = (row, col) => {
     if (validMoves.has(`${row}-${col}`)) {
@@ -103,25 +190,41 @@ function GameBoard({ gameState, onMakeMove, validMoves = new Set() }) {
       <BoardContainer ref={boardRef}>
         <Board $size={gameState.boardSize}>
           {gameState.board.map((row, rowIndex) =>
-            row.map((cell, colIndex) => (
-              <Cell
-                key={`${rowIndex}-${colIndex}`}
-                $clickable={validMoves.has(`${rowIndex}-${colIndex}`)}
-                onClick={() => handleCellClick(rowIndex, colIndex)}
-              >
-                {cell !== 0 && <Piece $player={cell} />}
-                {validMoves.has(`${rowIndex}-${colIndex}`) && (
-                  <div style={{
-                    position: 'absolute',
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    backgroundColor: '#FFD700',
-                    opacity: 0.7
-                  }} />
-                )}
-              </Cell>
-            ))
+            row.map((cell, colIndex) => {
+              const isFlipping = flippingPieces.has(`${rowIndex}-${colIndex}`);
+              const isPlacing = placingPieces.has(`${rowIndex}-${colIndex}`);
+              
+              const getAnimationClass = () => {
+                if (isFlipping) return 'flipping';
+                if (isPlacing) return 'placing';
+                return '';
+              };
+              
+              return (
+                <Cell
+                  key={`${rowIndex}-${colIndex}`}
+                  $clickable={validMoves.has(`${rowIndex}-${colIndex}`)}
+                  onClick={() => handleCellClick(rowIndex, colIndex)}
+                >
+                  {cell !== 0 && (
+                    <Piece 
+                      $player={cell} 
+                      className={getAnimationClass()}
+                    />
+                  )}
+                  {validMoves.has(`${rowIndex}-${colIndex}`) && (
+                    <div style={{
+                      position: 'absolute',
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: '#FFD700',
+                      opacity: 0.7
+                    }} />
+                  )}
+                </Cell>
+              );
+            })
           )}
         </Board>
       </BoardContainer>

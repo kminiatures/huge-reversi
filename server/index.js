@@ -68,6 +68,26 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('mouseMove', (data) => {
+    const { gameId, x, y, boardX, boardY } = data;
+    const game = gameManager.getGame(gameId);
+    
+    if (game) {
+      const player = game.players.find(p => p.socketId === socket.id);
+      if (player) {
+        // 自分以外のプレイヤーにマウス位置を送信
+        socket.to(gameId).emit('opponentMouseMove', {
+          playerName: player.playerName,
+          playerNumber: player.playerNumber,
+          x: x,
+          y: y,
+          boardX: boardX,
+          boardY: boardY
+        });
+      }
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
     gameManager.removePlayer(socket.id);
